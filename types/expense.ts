@@ -19,10 +19,9 @@ export type ExpenseInsert = {
 };
 
 export type WebhookExpensePayload = {
-  occurred_at: string;
-  description: string;
   category: string;
   amount_cents: number;
-  external_id?: string;
   source?: string;
+  occurred_at?: string;
+  external_id?: string;
 };

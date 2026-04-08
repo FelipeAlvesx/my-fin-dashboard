@@ -9,8 +9,6 @@ function isValidPayload(payload: unknown): payload is WebhookExpensePayload {
   const candidate = payload as Record<string, unknown>;
 
   return (
-    typeof candidate.occurred_at === "string" &&
-    typeof candidate.description === "string" &&
     typeof candidate.category === "string" &&
     typeof candidate.amount_cents === "number"
   );
@@ -53,7 +51,7 @@ export async function POST(req: Request) {
     return NextResponse.json(
       {
         error:
-          "Invalid payload. Required fields: occurred_at, description, category, amount_cents",
+          "Invalid payload. Required fields: category, amount_cents",
       },
       { status: 422 }
     );
@@ -64,8 +62,8 @@ export async function POST(req: Request) {
   const { data, error } = await supabaseAdmin
     .from("expenses")
     .insert({
-      occurred_at: payload.occurred_at,
-      description: payload.description,
+      occurred_at: payload.occurred_at ?? new Date().toISOString(),
+      description: normalizeCategory(payload.category),
       category: normalizeCategory(payload.category),
       amount_cents: payload.amount_cents,
       source: payload.source ?? "ai-agent",
