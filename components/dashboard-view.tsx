@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import {
@@ -23,6 +23,7 @@ import {
   monthLabel,
   normalizeMonthKey,
 } from "@/lib/expense-utils";
+import { getSupabaseBrowserClient } from "@/lib/supabase";
 
 type DashboardViewProps = {
   initialExpenses: Expense[];
@@ -38,19 +39,57 @@ const CATEGORY_COLORS = [
 ];
 
 export function DashboardView({ initialExpenses }: DashboardViewProps) {
+  const [allExpenses, setAllExpenses] = useState<Expense[]>(initialExpenses);
+  const [newEntry, setNewEntry] = useState(false);
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    const supabase = getSupabaseBrowserClient();
+    if (!supabase) return;
+
+    const channel = supabase
+      .channel("expenses-realtime")
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "expenses" },
+        (payload) => {
+          const expense = payload.new as Expense;
+          setAllExpenses((current) => [expense, ...current]);
+
+          // mostra toast por 4 segundos
+          setNewEntry(true);
+          if (toastTimer.current) clearTimeout(toastTimer.current);
+          toastTimer.current = setTimeout(() => setNewEntry(false), 4000);
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+      if (toastTimer.current) clearTimeout(toastTimer.current);
+    };
+  }, []);
+
   const months = useMemo(
-    () => getAvailableMonths(initialExpenses),
-    [initialExpenses],
+    () => getAvailableMonths(allExpenses),
+    [allExpenses],
   );
   const [selectedMonth, setSelectedMonth] = useState(months[0] ?? "");
+
+  // Se um novo mês aparecer via realtime e ainda não houver seleção, seleciona automaticamente
+  useEffect(() => {
+    if (!selectedMonth && months.length > 0) {
+      setSelectedMonth(months[0]);
+    }
+  }, [months, selectedMonth]);
 
   const expenses = useMemo(() => {
     if (!selectedMonth) return [];
 
-    return initialExpenses.filter(
+    return allExpenses.filter(
       (expense) => normalizeMonthKey(expense.occurred_at) === selectedMonth,
     );
-  }, [initialExpenses, selectedMonth]);
+  }, [allExpenses, selectedMonth]);
 
   const totalCents = useMemo(
     () => expenses.reduce((acc, expense) => acc + expense.amount_cents, 0),
@@ -116,6 +155,16 @@ export function DashboardView({ initialExpenses }: DashboardViewProps) {
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-[#060b09] text-[#edfff4]">
+      {/* Toast de novo lançamento via Realtime */}
+      <div
+        className={[
+          "fixed bottom-6 right-6 z-50 flex items-center gap-3 rounded-2xl border border-[#4de08f]/40 bg-[#0a1f15] px-5 py-3.5 shadow-[0_8px_40px_-8px_rgba(77,224,143,0.45)] backdrop-blur-xl transition-all duration-500",
+          newEntry ? "translate-y-0 opacity-100" : "translate-y-4 opacity-0 pointer-events-none",
+        ].join(" ")}
+      >
+        <span className="h-2 w-2 animate-pulse rounded-full bg-[#58ec9d]" />
+        <p className="text-sm text-[#cefae2]">Novo lançamento registrado!</p>
+      </div>
       <div className="pointer-events-none absolute inset-0">
         <div className="absolute -top-20 left-1/2 h-80 w-80 -translate-x-1/2 rounded-full bg-[#4cf58f]/15 blur-3xl" />
         <div className="absolute top-[26rem] -left-28 h-80 w-80 rounded-full bg-[#29ba6f]/15 blur-3xl" />
@@ -292,8 +341,9 @@ export function DashboardView({ initialExpenses }: DashboardViewProps) {
             <h2 className="text-lg font-medium text-white">
               Lançamentos do mês
             </h2>
-            <p className="text-[11px] uppercase tracking-[0.2em] text-[#aaf2ca]">
-              Webhook + Supabase
+            <p className="flex items-center gap-1.5 text-[11px] uppercase tracking-[0.2em] text-[#aaf2ca]">
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#58ec9d]" />
+              Ao vivo
             </p>
           </div>
 
