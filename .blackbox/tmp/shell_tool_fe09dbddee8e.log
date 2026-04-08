@@ -1,0 +1,16 @@
+
+> dashboard@0.1.0 dev
+> next dev
+
+▲ Next.js 16.2.2 (Turbopack)
+- Local:         http://localhost:3000
+- Network:       http://10.190.197.42:3000
+- Environments: .env.local
+✓ Ready in 424ms
+
+ GET / 200 in 1764ms (next.js: 168ms, application-code: 1596ms)
+ GET / 200 in 1522ms (next.js: 34ms, application-code: 1488ms)
+ GET / 200 in 328ms (next.js: 8ms, application-code: 319ms)
+ GET / 200 in 2.3s (next.js: 116ms, application-code: 2.2s)
+ GET /apple-touch-icon-precomposed.png 404 in 1302ms (next.js: 1246ms, application-code: 56ms)
+ GET /apple-touch-icon.png 404 in 36ms (next.js: 4ms, application-code: 32ms)
