@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdminClient } from "@/lib/supabase-admin";
+import { normalizeCategory } from "@/lib/category-normalizer";
 import type { WebhookExpensePayload } from "@/types/expense";
 
 function isValidPayload(payload: unknown): payload is WebhookExpensePayload {
@@ -65,7 +66,7 @@ export async function POST(req: Request) {
     .insert({
       occurred_at: payload.occurred_at,
       description: payload.description,
-      category: payload.category,
+      category: normalizeCategory(payload.category),
       amount_cents: payload.amount_cents,
       source: payload.source ?? "ai-agent",
       external_id: payload.external_id ?? null,
