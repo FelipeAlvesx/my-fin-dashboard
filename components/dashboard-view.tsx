@@ -24,6 +24,7 @@ import {
   normalizeMonthKey,
 } from "@/lib/expense-utils";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
+import { ExpenseModal, type ExpenseModalMode } from "@/components/expense-modal";
 
 type DashboardViewProps = {
   initialExpenses: Expense[];
@@ -43,6 +44,10 @@ export function DashboardView({ initialExpenses }: DashboardViewProps) {
   const [newEntry, setNewEntry] = useState(false);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Estado do modal: null = fechado; { type: "create" } ou { type: "edit", expense }
+  const [modalMode, setModalMode] = useState<ExpenseModalMode | null>(null);
+
+  // Realtime — INSERT, UPDATE, DELETE
   useEffect(() => {
     const supabase = getSupabaseBrowserClient();
     if (!supabase) return;
@@ -56,10 +61,29 @@ export function DashboardView({ initialExpenses }: DashboardViewProps) {
           const expense = payload.new as Expense;
           setAllExpenses((current) => [expense, ...current]);
 
-          // mostra toast por 4 segundos
           setNewEntry(true);
           if (toastTimer.current) clearTimeout(toastTimer.current);
           toastTimer.current = setTimeout(() => setNewEntry(false), 4000);
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "expenses" },
+        (payload) => {
+          const updated = payload.new as Expense;
+          setAllExpenses((current) =>
+            current.map((e) => (e.id === updated.id ? updated : e)),
+          );
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "DELETE", schema: "public", table: "expenses" },
+        (payload) => {
+          const deleted = payload.old as { id: string };
+          setAllExpenses((current) =>
+            current.filter((e) => e.id !== deleted.id),
+          );
         },
       )
       .subscribe();
@@ -76,7 +100,6 @@ export function DashboardView({ initialExpenses }: DashboardViewProps) {
   );
   const [selectedMonth, setSelectedMonth] = useState(months[0] ?? "");
 
-  // Se um novo mês aparecer via realtime e ainda não houver seleção, seleciona automaticamente
   useEffect(() => {
     if (!selectedMonth && months.length > 0) {
       setSelectedMonth(months[0]);
@@ -85,7 +108,6 @@ export function DashboardView({ initialExpenses }: DashboardViewProps) {
 
   const expenses = useMemo(() => {
     if (!selectedMonth) return [];
-
     return allExpenses.filter(
       (expense) => normalizeMonthKey(expense.occurred_at) === selectedMonth,
     );
@@ -101,29 +123,24 @@ export function DashboardView({ initialExpenses }: DashboardViewProps) {
 
   const topCategory = useMemo(() => {
     if (expenses.length === 0) return "-";
-
     const categories = new Map<string, number>();
-
     for (const expense of expenses) {
       categories.set(
         expense.category,
         (categories.get(expense.category) ?? 0) + expense.amount_cents,
       );
     }
-
     return [...categories.entries()].sort((a, b) => b[1] - a[1])[0][0];
   }, [expenses]);
 
   const categoryData = useMemo(() => {
     const grouped = new Map<string, number>();
-
     for (const expense of expenses) {
       grouped.set(
         expense.category,
         (grouped.get(expense.category) ?? 0) + expense.amount_cents,
       );
     }
-
     return [...grouped.entries()].map(([name, amount]) => ({
       name,
       value: Number((amount / 100).toFixed(2)),
@@ -132,7 +149,6 @@ export function DashboardView({ initialExpenses }: DashboardViewProps) {
 
   const dailyData = useMemo(() => {
     const grouped = new Map<string, number>();
-
     for (const expense of expenses) {
       const dayLabel = format(parseISO(expense.occurred_at), "dd/MM");
       grouped.set(
@@ -140,7 +156,6 @@ export function DashboardView({ initialExpenses }: DashboardViewProps) {
         (grouped.get(dayLabel) ?? 0) + expense.amount_cents,
       );
     }
-
     return [...grouped.entries()]
       .map(([day, amount]) => ({
         day,
@@ -153,18 +168,56 @@ export function DashboardView({ initialExpenses }: DashboardViewProps) {
       });
   }, [expenses]);
 
+  // Handlers do modal
+  function handleDelete(expense: Expense) {
+    if (!confirm(`Excluir "${expense.category}" de ${formatCurrencyFromCents(expense.amount_cents)}?`)) return;
+
+    fetch(`/api/expenses/${expense.id}`, { method: "DELETE" })
+      .then((res) => {
+        if (res.ok) {
+          setAllExpenses((current) => current.filter((e) => e.id !== expense.id));
+        }
+      })
+      .catch(() => {
+        /* silencia — o Realtime vai corrigir o estado */
+      });
+  }
+
+  function handleModalSuccess(saved: Expense) {
+    if (modalMode?.type === "edit") {
+      setAllExpenses((current) =>
+        current.map((e) => (e.id === saved.id ? saved : e)),
+      );
+    } else {
+      setAllExpenses((current) => [saved, ...current]);
+    }
+    setModalMode(null);
+  }
+
   return (
     <div className="relative min-h-screen overflow-hidden bg-[#060b09] text-[#edfff4]">
       {/* Toast de novo lançamento via Realtime */}
       <div
         className={[
           "fixed bottom-6 right-6 z-50 flex items-center gap-3 rounded-2xl border border-[#4de08f]/40 bg-[#0a1f15] px-5 py-3.5 shadow-[0_8px_40px_-8px_rgba(77,224,143,0.45)] backdrop-blur-xl transition-all duration-500",
-          newEntry ? "translate-y-0 opacity-100" : "translate-y-4 opacity-0 pointer-events-none",
+          newEntry
+            ? "translate-y-0 opacity-100"
+            : "translate-y-4 opacity-0 pointer-events-none",
         ].join(" ")}
       >
         <span className="h-2 w-2 animate-pulse rounded-full bg-[#58ec9d]" />
         <p className="text-sm text-[#cefae2]">Novo lançamento registrado!</p>
       </div>
+
+      {/* Modal */}
+      {modalMode && (
+        <ExpenseModal
+          mode={modalMode}
+          onClose={() => setModalMode(null)}
+          onSuccess={handleModalSuccess}
+        />
+      )}
+
       <div className="pointer-events-none absolute inset-0">
         <div className="absolute -top-20 left-1/2 h-80 w-80 -translate-x-1/2 rounded-full bg-[#4cf58f]/15 blur-3xl" />
         <div className="absolute top-[26rem] -left-28 h-80 w-80 rounded-full bg-[#29ba6f]/15 blur-3xl" />
@@ -172,6 +225,7 @@ export function DashboardView({ initialExpenses }: DashboardViewProps) {
       </div>
 
       <div className="relative mx-auto flex w-full max-w-[1280px] flex-col px-4 py-6 md:px-8 md:py-10 xl:px-10">
+        {/* Header */}
         <header className="relative overflow-hidden rounded-[2rem] border border-white/10 bg-[linear-gradient(135deg,rgba(14,32,23,0.95),rgba(10,22,16,0.88))] p-6 shadow-[0_30px_80px_-45px_rgba(84,245,151,0.75)] backdrop-blur-2xl transition duration-300 md:p-9">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_0%,rgba(114,255,179,0.2),transparent_45%),radial-gradient(circle_at_85%_10%,rgba(76,245,143,0.15),transparent_35%)]" />
           <div className="relative flex flex-col gap-8 xl:flex-row xl:items-end xl:justify-between">
@@ -202,6 +256,7 @@ export function DashboardView({ initialExpenses }: DashboardViewProps) {
           </div>
         </header>
 
+        {/* Seletor de mês */}
         <section className="mt-5 rounded-3xl border border-white/10 bg-white/[0.03] p-4 backdrop-blur-2xl md:p-5">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div>
@@ -243,6 +298,7 @@ export function DashboardView({ initialExpenses }: DashboardViewProps) {
           </section>
         ) : null}
 
+        {/* Métricas */}
         <section className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <MetricCard
             label="Total do mês"
@@ -257,6 +313,7 @@ export function DashboardView({ initialExpenses }: DashboardViewProps) {
           <MetricCard label="Categoria líder" value={topCategory} />
         </section>
 
+        {/* Gráficos */}
         <section className="mt-5 grid grid-cols-1 gap-4 xl:grid-cols-5">
           <ChartCard
             title="Evolução diária de gastos"
@@ -336,15 +393,25 @@ export function DashboardView({ initialExpenses }: DashboardViewProps) {
           </ChartCard>
         </section>
 
+        {/* Tabela de lançamentos */}
         <section className="mt-5 rounded-3xl border border-white/10 bg-white/[0.03] p-4 backdrop-blur-2xl md:p-5">
           <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <h2 className="text-lg font-medium text-white">
               Lançamentos do mês
             </h2>
-            <p className="flex items-center gap-1.5 text-[11px] uppercase tracking-[0.2em] text-[#aaf2ca]">
-              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#58ec9d]" />
-              Ao vivo
-            </p>
+            <div className="flex items-center gap-3">
+              <p className="flex items-center gap-1.5 text-[11px] uppercase tracking-[0.2em] text-[#aaf2ca]">
+                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#58ec9d]" />
+                Ao vivo
+              </p>
+              <button
+                type="button"
+                onClick={() => setModalMode({ type: "create" })}
+                className="flex items-center gap-1.5 rounded-2xl border border-[#4de08f]/30 bg-[#0a1f15] px-3.5 py-1.5 text-xs font-medium text-[#9ef6c8] transition hover:border-[#4de08f]/60 hover:text-white"
+              >
+                <span className="text-base leading-none">+</span> Adicionar
+              </button>
+            </div>
           </div>
 
           {expenses.length === 0 ? (
@@ -357,24 +424,25 @@ export function DashboardView({ initialExpenses }: DashboardViewProps) {
                 <thead className="bg-white/[0.03]">
                   <tr className="border-b border-[#2f7f57]/70 text-[#cbf9de]">
                     <th className="py-3 pl-4 pr-4 font-medium">Data</th>
-                    <th className="py-3 pr-4 font-medium">Descrição</th>
                     <th className="py-3 pr-4 font-medium">Categoria</th>
                     <th className="py-3 pr-4 font-medium">Origem</th>
                     <th className="py-3 pr-4 text-right font-medium">Valor</th>
+                    <th className="py-3 pr-4 text-right font-medium">
+                      <span className="sr-only">Ações</span>
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
                   {expenses.map((expense) => (
                     <tr
                       key={expense.id}
-                      className="border-b border-[#1a4a33]/70 text-[#edfff4] transition duration-200 hover:bg-[#10261b]/70"
+                      className="group border-b border-[#1a4a33]/70 text-[#edfff4] transition duration-200 hover:bg-[#10261b]/70"
                     >
                       <td className="py-3 pl-4 pr-4">
                         {format(parseISO(expense.occurred_at), "dd 'de' MMM", {
                           locale: ptBR,
                         })}
                       </td>
-                      <td className="py-3 pr-4">{expense.description}</td>
                       <td className="py-3 pr-4">
                         <span className="rounded-full border border-[#73e9aa]/35 bg-[#0f2a1c] px-2.5 py-1 text-xs text-[#c7fbde]">
                           {expense.category}
@@ -385,6 +453,28 @@ export function DashboardView({ initialExpenses }: DashboardViewProps) {
                       </td>
                       <td className="py-3 pr-4 text-right font-semibold text-[#9bf5c5]">
                         {formatCurrencyFromCents(expense.amount_cents)}
+                      </td>
+                      <td className="py-3 pr-4">
+                        <div className="flex items-center justify-end gap-2 opacity-0 transition-opacity duration-150 group-hover:opacity-100">
+                          <button
+                            type="button"
+                            aria-label={`Editar ${expense.category}`}
+                            onClick={() =>
+                              setModalMode({ type: "edit", expense })
+                            }
+                            className="flex h-7 w-7 items-center justify-center rounded-full border border-white/10 text-[#9ef6c8] transition hover:border-[#4de08f]/50 hover:text-white"
+                          >
+                            ✏️
+                          </button>
+                          <button
+                            type="button"
+                            aria-label={`Excluir ${expense.category}`}
+                            onClick={() => handleDelete(expense)}
+                            className="flex h-7 w-7 items-center justify-center rounded-full border border-white/10 text-[#f87171] transition hover:border-red-500/50 hover:text-red-300"
+                          >
+                            🗑
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
