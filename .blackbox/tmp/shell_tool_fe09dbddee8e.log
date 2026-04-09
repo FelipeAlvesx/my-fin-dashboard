@@ -14,3 +14,4 @@
  GET / 200 in 2.3s (next.js: 116ms, application-code: 2.2s)
  GET /apple-touch-icon-precomposed.png 404 in 1302ms (next.js: 1246ms, application-code: 56ms)
  GET /apple-touch-icon.png 404 in 36ms (next.js: 4ms, application-code: 32ms)
+[?25h

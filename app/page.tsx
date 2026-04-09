@@ -1,5 +1,6 @@
 import { getSupabaseAdminClient } from "@/lib/supabase-admin";
 import { DashboardView } from "@/components/dashboard-view";
+import { LogoutButton } from "@/components/logout-button";
 import type { Expense } from "@/types/expense";
 
 export const dynamic = "force-dynamic";
@@ -27,5 +28,5 @@ async function getExpenses(): Promise<Expense[]> {
 export default async function Home() {
   const expenses = await getExpenses();
 
-  return <DashboardView initialExpenses={expenses} />;
+  return <DashboardView initialExpenses={expenses} logoutButton={<LogoutButton />} />;
 }
