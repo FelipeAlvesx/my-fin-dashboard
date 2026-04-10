@@ -33,19 +33,20 @@ Aplicação Next.js já publicada na Vercel. Prioridade atual não é robustez m
 - `lib/supabase/server.ts` — client server-side com storage de cookie customizado
 - `app/actions/auth.ts` — Server Actions `login()` e `logout()`
 - `app/login/page.tsx` — tela de login com visual dark + formulário com `useActionState`
-- `middleware.ts` — proteção de rotas via Edge (público: `/login`, `/api/webhooks`)
+- `proxy.ts` — proteção de rotas via Edge (público: `/login`, `/api/webhooks`) — renomeado de `middleware.ts` para seguir a convenção do Next.js 16
 - `components/logout-button.tsx` — botão "Sair" com `useTransition`
 - `components/dashboard-view.tsx` — aceita `logoutButton` como prop; botão movido para fora do header
 - `app/page.tsx` — passa `<LogoutButton />` ao dashboard
 - `README.md` — seção de autenticação adicionada
 
-## Observação técnica importante
-O `@supabase/supabase-js` v2 armazena sessão num cookie chamado `sb-<ref>-auth-token` (podendo ter chunks `.0`, `.1`…). O logout e o middleware precisam lidar com esse nome — qualquer cookie com nome diferente não terá efeito.
+## Observações técnicas importantes
+- O `@supabase/supabase-js` v2 armazena sessão num cookie chamado `sb-<ref>-auth-token` (podendo ter chunks `.0`, `.1`…). O logout e o proxy precisam lidar com esse nome — qualquer cookie com nome diferente não terá efeito.
+- No Next.js 16, o arquivo de interceptação de rotas é `proxy.ts` (não `middleware.ts`). A função exportada também deve ser `proxy` (não `middleware`). Usar o nome antigo gera warning no build e pode não funcionar.
 
 ## Próximos passos (próxima fase)
 - [ ] Documentar o diferencial de IA do projeto (agente de ingestão via webhook).
 - [ ] Decidir se `/signup` e `/forgot-password` entram (atualmente fora do escopo).
-- [ ] Avaliar deploy na Vercel com as variáveis de ambiente corretas.
+- [x] Variáveis de ambiente configuradas na Vercel. Commit `feat: autenticação completa com Supabase Auth` feito e push pendente.
 - [ ] Avaliar proteção do endpoint `/api/webhooks/expenses` com um secret token (atualmente público).
 
 ## Regras de continuidade entre sessões

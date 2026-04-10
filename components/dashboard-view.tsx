@@ -28,7 +28,6 @@ import { ExpenseModal, type ExpenseModalMode } from "@/components/expense-modal"
 
 type DashboardViewProps = {
   initialExpenses: Expense[];
-  logoutButton?: React.ReactNode;
 };
 
 const CATEGORY_COLORS = [
@@ -40,7 +39,7 @@ const CATEGORY_COLORS = [
   "#248F58",
 ];
 
-export function DashboardView({ initialExpenses, logoutButton }: DashboardViewProps) {
+export function DashboardView({ initialExpenses }: DashboardViewProps) {
   const [allExpenses, setAllExpenses] = useState<Expense[]>(initialExpenses);
   const [newEntry, setNewEntry] = useState(false);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -196,7 +195,7 @@ export function DashboardView({ initialExpenses, logoutButton }: DashboardViewPr
   }
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-[#060b09] text-[#edfff4]">
+    <div className="relative min-h-full overflow-hidden text-[#edfff4]">
       {/* Toast de novo lançamento via Realtime */}
       <div
         className={[
@@ -226,12 +225,6 @@ export function DashboardView({ initialExpenses, logoutButton }: DashboardViewPr
       </div>
 
       <div className="relative mx-auto flex w-full max-w-[1280px] flex-col px-4 py-6 md:px-8 md:py-10 xl:px-10">
-        {/* Barra superior com botão de logout */}
-        {logoutButton && (
-          <div className="mb-3 flex justify-end">
-            {logoutButton}
-          </div>
-        )}
 
         {/* Header */}
         <header className="relative overflow-hidden rounded-[2rem] border border-white/10 bg-[linear-gradient(135deg,rgba(14,32,23,0.95),rgba(10,22,16,0.88))] p-6 shadow-[0_30px_80px_-45px_rgba(84,245,151,0.75)] backdrop-blur-2xl transition duration-300 md:p-9">
